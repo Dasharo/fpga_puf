@@ -36,10 +36,10 @@
 #define fpga_puf_neorv32_cfs_h
 
 // CFS registers
-#define FPGA_PUF_CTRL NEORV32_CFS.REG[0] // control register
-#define FPGA_PUF_ID0  NEORV32_CFS.REG[1] // puf id bits 31:0
-#define FPGA_PUF_ID1  NEORV32_CFS.REG[2] // puf id bits 63:32
-#define FPGA_PUF_ID2  NEORV32_CFS.REG[3] // puf id bits 95:64
+#define FPGA_PUF_CTRL NEORV32_CFS->REG[0] // control register
+#define FPGA_PUF_ID0  NEORV32_CFS->REG[1] // puf id bits 31:0
+#define FPGA_PUF_ID1  NEORV32_CFS->REG[2] // puf id bits 63:32
+#define FPGA_PUF_ID2  NEORV32_CFS->REG[3] // puf id bits 95:64
 
 // control register bits
 #define PUF_CTRL_EN     0 // module enable/reset

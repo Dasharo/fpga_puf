@@ -66,7 +66,7 @@ int main() {
   neorv32_rte_setup();
 
   // setup UART0 at default baud rate, no parity bits, ho hw flow control
-  neorv32_uart0_setup(BAUD_RATE, PARITY_NONE, FLOW_CONTROL_RTSCTS);
+  neorv32_uart0_setup(BAUD_RATE, 0);
 
   neorv32_uart0_printf("Physical Unclonable Functions <fpga_puf> Test\n");
   neorv32_uart0_printf("PUF implemented as NEORV32 Custom Functions Subsystem (CFS)\n\n");

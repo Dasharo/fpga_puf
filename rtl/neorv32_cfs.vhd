@@ -60,36 +60,17 @@ entity neorv32_cfs is
     -- host access --
     clk_i       : in  std_ulogic; -- global clock line
     rstn_i      : in  std_ulogic; -- global reset line, low-active, use as async
-    addr_i      : in  std_ulogic_vector(31 downto 0); -- address
-    rden_i      : in  std_ulogic; -- read enable
-    wren_i      : in  std_ulogic; -- word write enable
-    data_i      : in  std_ulogic_vector(31 downto 0); -- data in
-    data_o      : out std_ulogic_vector(31 downto 0); -- data out
-    ack_o       : out std_ulogic; -- transfer acknowledge
-    err_o       : out std_ulogic; -- transfer error
-    -- clock generator --
-    clkgen_en_o : out std_ulogic; -- enable clock generator
-    clkgen_i    : in  std_ulogic_vector(07 downto 0); -- "clock" inputs
-    -- interrupt --
-    irq_o       : out std_ulogic; -- interrupt request
-    -- custom io (conduits) --
-    cfs_in_i    : in  std_ulogic_vector(CFS_IN_SIZE-1 downto 0);  -- custom inputs
-    cfs_out_o   : out std_ulogic_vector(CFS_OUT_SIZE-1 downto 0)  -- custom outputs
+    bus_req_i   : in  bus_req_t; -- bus request
+    bus_rsp_o   : out bus_rsp_t := rsp_terminate_c; -- bus response
+    clkgen_en_o : out std_ulogic := '0'; -- enable clock generator
+    clkgen_i    : in  std_ulogic_vector(7 downto 0); -- "clock" inputs
+    irq_o       : out std_ulogic := '0'; -- interrupt request
+    cfs_in_i    : in  std_ulogic_vector(CFS_IN_SIZE-1 downto 0); -- custom inputs
+    cfs_out_o   : out std_ulogic_vector(CFS_OUT_SIZE-1 downto 0) := (others => '0') -- custom outputs
   );
 end neorv32_cfs;
 
 architecture neorv32_cfs_rtl of neorv32_cfs is
-
-  -- IO space: module base address (DO NOT MODIFY!) --
-  constant hi_abb_c : natural := index_size_f(io_size_c)-1; -- high address boundary bit
-  constant lo_abb_c : natural := index_size_f(cfs_size_c); -- low address boundary bit
-
-  -- access control --
-  signal acc_en : std_ulogic; -- module access enable
-  signal addr   : std_ulogic_vector(31 downto 0); -- access address
-  signal wren   : std_ulogic; -- word write enable
-  signal rden   : std_ulogic; -- read enable
-
   -- control register bits --
   constant ctrl_en_c     : natural := 0; -- r/w: unit enable (reset when disabled)
   constant ctrl_sample_c : natural := 1; -- r/w: set to trigger ID sampling, clears when sampling is done
@@ -112,48 +93,56 @@ architecture neorv32_cfs_rtl of neorv32_cfs is
   end component;
 
 begin
-
-  -- Access Control -------------------------------------------------------------------------
-  -- -------------------------------------------------------------------------------------------
-  acc_en <= '1' when (addr_i(hi_abb_c downto lo_abb_c) = cfs_base_c(hi_abb_c downto lo_abb_c)) else '0';
-  addr   <= cfs_base_c(31 downto lo_abb_c) & addr_i(lo_abb_c-1 downto 2) & "00";
-  wren   <= acc_en and wren_i;
-  rden   <= acc_en and rden_i;
+  -- LEDs --
+  cfs_out_o <= (
+    0 => busy,
+    others => '0'
+  );
 
   -- unused --
-  err_o       <= '0';
-  cfs_out_o   <= (others => '0');
   clkgen_en_o <= '0';
-  irq_o       <= '0';
-
+  irq_o <= '0';
 
   -- Read/Write Access ----------------------------------------------------------------------
   -- -------------------------------------------------------------------------------------------
   host_access: process(clk_i)
   begin
-    if rising_edge(clk_i) then
-      -- bus acknowledge --
-      ack_o <= rden or wren;
-
-      -- write access --
+    if (rstn_i = '0') then
       trigger <= '0';
-      if (wren = '1') then
-        if (addr = cfs_reg0_addr_c) then -- control register
-          enable  <= data_i(ctrl_en_c);
-          trigger <= data_i(ctrl_sample_c);
-        end if;
-      end if;
+      bus_rsp_o.ack  <= '0';
+      bus_rsp_o.err  <= '0';
+      bus_rsp_o.data <= (others => '0');
+    elsif rising_edge(clk_i) then
+      -- transfer/access acknowledge --
+      bus_rsp_o.ack <= bus_req_i.stb;
 
-      -- read access --
-      data_o <= (others => '0');
-      if (rden = '1') then
-        case addr(3 downto 2) is
-          when "00" => data_o(ctrl_en_c) <= enable; data_o(ctrl_sample_c) <= busy or trigger; -- busy flag
-          when "01" => data_o <= puf_id(31 downto 00);
-          when "10" => data_o <= puf_id(63 downto 32);
-          when "11" => data_o <= puf_id(95 downto 64);
-          when others => NULL;
-        end case;
+      -- tie to zero if not explicitly used --
+      bus_rsp_o.err <= '0';
+
+      -- defaults --
+      bus_rsp_o.data <= (others => '0'); -- the output HAS TO BE ZERO if there is no actual (read) access
+
+      trigger <= '0';
+
+      if (bus_req_i.stb = '1') then
+        if (bus_req_i.rw = '1') then
+          -- write access --
+          case bus_req_i.addr(3 downto 2) is
+            when "00" =>
+              enable  <= bus_req_i.data(ctrl_en_c);
+              trigger <= bus_req_i.data(ctrl_sample_c);
+            when others => NULL;
+          end case;
+        else
+          -- read access --
+          case bus_req_i.addr(3 downto 2) is
+            when "00" => bus_rsp_o.data(ctrl_en_c) <= enable; bus_rsp_o.data(ctrl_sample_c) <= busy; -- busy flag
+            when "01" => bus_rsp_o.data <= puf_id(31 downto 00);
+            when "10" => bus_rsp_o.data <= puf_id(63 downto 32);
+            when "11" => bus_rsp_o.data <= puf_id(95 downto 64);
+            when others => NULL;
+          end case;
+        end if;
       end if;
     end if;
   end process host_access;

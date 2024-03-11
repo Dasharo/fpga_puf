@@ -43,7 +43,7 @@
  **************************************************************************/
 int fpga_puf_available(void) {
 
-  if (NEORV32_SYSINFO.SOC & (1 << SYSINFO_SOC_IO_CFS)) {
+  if (NEORV32_SYSINFO->SOC & (1 << SYSINFO_SOC_IO_CFS)) {
     return 1;
   }
   else {
@@ -62,7 +62,6 @@ int fpga_puf_available(void) {
  * @param[in,out] puf_data 3x 32-bit array for the 96-bit raw ID (#puf_data_t);
  **************************************************************************/
 void fpga_puf_get_raw(puf_data_t *puf_data) {
-
   FPGA_PUF_CTRL = 0; // reset
 
   // enable PUF and trigger sampling
